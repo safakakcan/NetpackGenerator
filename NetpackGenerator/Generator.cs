@@ -98,6 +98,13 @@ namespace Netpack
                 {
                     var elementType = field.FieldType.GetElementType();
 
+                    var iterationIndexName = string.Empty;
+                    var iterationDepth = fieldName.Split('.').Length - 1;
+                    for (int i = 0; i < iterationDepth; i++)
+                    {
+                        iterationIndexName += "i";
+                    }
+
                     var sizeExpression = new CodeMethodReferenceExpression(new CodeSnippetExpression("MemoryMarshal"), "Write", new CodeTypeReference(typeof(ushort)));
                     var sizeSliceExpression = new CodeMethodReferenceExpression(new CodeVariableReferenceExpression("Data"), "Slice");
                     statements.Add(new CodeCommentStatement($"Write array size of {fieldName}"));
@@ -114,13 +121,13 @@ namespace Netpack
 
                         iterationStatements = new CodeStatementCollection()
                         {
-                            new CodeExpressionStatement(new CodeMethodInvokeExpression(methodRefExpression, new CodeMethodInvokeExpression(spanSliceExpression, new CodeVariableReferenceExpression("Index")), new CodeSnippetExpression($"ref {fieldName}[i]"))),
+                            new CodeExpressionStatement(new CodeMethodInvokeExpression(methodRefExpression, new CodeMethodInvokeExpression(spanSliceExpression, new CodeVariableReferenceExpression("Index")), new CodeSnippetExpression($"ref {fieldName}[{iterationIndexName}]"))),
                             new CodeAssignStatement(new CodeVariableReferenceExpression("Index"), new CodeSnippetExpression($"Index + sizeof({elementType.Name})"))
                         };
                     }
                     else
                     {
-                        GenerateFieldSerializer(iterationStatements, elementType.GetFields(), $"{fieldName}[i]");
+                        GenerateFieldSerializer(iterationStatements, elementType.GetFields(), $"{fieldName}[{iterationIndexName}]");
                     }
 
                     var iterationStatementArray = new CodeStatement[iterationStatements.Count];
@@ -130,7 +137,7 @@ namespace Netpack
                     }
 
                     statements.Add(new CodeCommentStatement($"Iterate {fieldName} array"));
-                    statements.Add(new CodeIterationStatement(new CodeVariableDeclarationStatement(typeof(int), "i", new CodeSnippetExpression("0")), new CodeSnippetExpression($"i < {fieldName}.Length"), new CodeSnippetStatement("i++"), iterationStatementArray));
+                    statements.Add(new CodeIterationStatement(new CodeVariableDeclarationStatement(typeof(int), iterationIndexName, new CodeSnippetExpression("0")), new CodeSnippetExpression($"{iterationIndexName} < {fieldName}.Length"), new CodeSnippetStatement($"{iterationIndexName}++"), iterationStatementArray));
                     continue;
                 }
                 

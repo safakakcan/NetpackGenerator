@@ -26,6 +26,16 @@ namespace Netpack {
                 // Write value of TestMessage.Stat[i].Speed
                 MemoryMarshal.Write<float>(Data.Slice(Index), ref TestMessage.Stat[i].Speed);
                 Index = Index + sizeof(Single);
+                // Write array size of TestMessage.Stat[i].Data
+                ArraySize = (ushort)TestMessage.Stat[i].Data.Length;
+                MemoryMarshal.Write<ushort>(Data.Slice(Index), ref ArraySize);
+                Index = Index + sizeof(ushort);
+                // Iterate TestMessage.Stat[i].Data array
+                for (int ii = 0; ii < TestMessage.Stat[i].Data.Length; ii++
+                ) {
+                    MemoryMarshal.Write<byte>(Data.Slice(Index), ref TestMessage.Stat[i].Data[ii]);
+                    Index = Index + sizeof(Byte);
+                }
             }
         }
         
