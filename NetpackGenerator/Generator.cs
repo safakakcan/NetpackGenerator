@@ -1,9 +1,7 @@
 ﻿using Microsoft.CSharp;
 using System.CodeDom;
 using System.CodeDom.Compiler;
-using System.Globalization;
 using System.Reflection;
-using System.Reflection.Metadata;
 using System.Text;
 
 namespace Netpack
@@ -54,6 +52,7 @@ namespace Netpack
                     deserializationMethod.Parameters.Add(new CodeParameterDeclarationExpression(new CodeTypeReference(typeof(int)), "Index") { Direction = FieldDirection.Ref });
                     deserializationMethod.Parameters.Add(new CodeParameterDeclarationExpression(new CodeTypeReference(type), typeName) { Direction = FieldDirection.Out });
 
+                    deserializationMethod.Statements.Add(new CodeVariableDeclarationStatement(typeof(ushort), "ArraySize"));
                     GenerateFieldDeserializer(deserializationMethod.Statements, fields, type, typeName);
 
                     generatedClass.Members.Add(deserializationMethod);
@@ -168,7 +167,49 @@ namespace Netpack
 
                 if (field.FieldType.IsArray || field.FieldType == typeof(string))
                 {
+                    var elementType = field.FieldType.GetElementType();
 
+                    var iterationIndexName = string.Empty;
+                    var iterationDepth = fieldName.Split('.').Length - 1;
+                    for (int i = 0; i < iterationDepth; i++)
+                    {
+                        iterationIndexName += "i";
+                    }
+
+                    var sizeExpression = new CodeMethodReferenceExpression(new CodeSnippetExpression("MemoryMarshal"), "Read", new CodeTypeReference(typeof(ushort)));
+                    var sizeSliceExpression = new CodeMethodReferenceExpression(new CodeVariableReferenceExpression("Data"), "Slice");
+                    var readSizeExpression = new CodeMethodInvokeExpression(sizeExpression, new CodeMethodInvokeExpression(sizeSliceExpression, new CodeVariableReferenceExpression("Index"), new CodeSnippetExpression($"sizeof(ushort)")));
+                    statements.Add(new CodeCommentStatement($"Write array size of {fieldName}"));
+                    statements.Add(new CodeAssignStatement(new CodeVariableReferenceExpression("ArraySize"), readSizeExpression));
+                    statements.Add(new CodeAssignStatement(new CodeVariableReferenceExpression(fieldName), new CodeSnippetExpression($"new {elementType.Name}[ArraySize]")));
+                    statements.Add(new CodeAssignStatement(new CodeVariableReferenceExpression("Index"), new CodeSnippetExpression($"Index + sizeof(ushort)")));
+
+                    var iterationStatements = new CodeStatementCollection();
+
+                    if (elementType.IsPrimitive && elementType != typeof(string))
+                    {
+                        var methodRefExpression = new CodeMethodReferenceExpression(new CodeSnippetExpression("MemoryMarshal"), "Read", new CodeTypeReference(elementType));
+                        var spanSliceExpression = new CodeMethodReferenceExpression(new CodeVariableReferenceExpression("Data"), "Slice");
+
+                        iterationStatements = new CodeStatementCollection()
+                        {
+                            new CodeAssignStatement(new CodeIndexerExpression(new CodeVariableReferenceExpression(fieldName), new CodeSnippetExpression(iterationIndexName)), new CodeMethodInvokeExpression(methodRefExpression, new CodeMethodInvokeExpression(spanSliceExpression, new CodeVariableReferenceExpression("Index")))),
+                            new CodeAssignStatement(new CodeVariableReferenceExpression("Index"), new CodeSnippetExpression($"Index + sizeof({elementType.Name})"))
+                        };
+                    }
+                    else
+                    {
+                        GenerateFieldDeserializer(iterationStatements, elementType.GetFields(), elementType, $"{fieldName}[{iterationIndexName}]");
+                    }
+
+                    var iterationStatementArray = new CodeStatement[iterationStatements.Count];
+                    for (int i = 0; i < iterationStatements.Count; i++)
+                    {
+                        iterationStatementArray[i] = iterationStatements[i];
+                    }
+
+                    statements.Add(new CodeCommentStatement($"Iterate {fieldName} array"));
+                    statements.Add(new CodeIterationStatement(new CodeVariableDeclarationStatement(typeof(int), iterationIndexName, new CodeSnippetExpression("0")), new CodeSnippetExpression($"{iterationIndexName} < {fieldName}.Length"), new CodeSnippetStatement($"{iterationIndexName}++"), iterationStatementArray));
                     continue;
                 }
 
