@@ -8,6 +8,8 @@ namespace Netpack
         public int Id;
         public float Value;
         public InnerStruct[] Stat;
+        public string Text;
+        public string[] TextArray;
 
         public TestMessage()
         {
@@ -18,6 +20,12 @@ namespace Netpack
                 new InnerStruct(),
                 new InnerStruct(),
                 new InnerStruct()
+            };
+            Text = "Test";
+            TextArray = new string[]
+            {
+                "Line 1",
+                "Line 2"
             };
         }
     }
