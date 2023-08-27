@@ -21,6 +21,7 @@ namespace Netpack
                 Console.WriteLine($"{x.Stat[0].Speed} => {y.Stat[0].Speed}");
                 Console.WriteLine($"{x.Text} => {y.Text}");
                 Console.WriteLine($"{x.TextArray[0]} => {y.TextArray[0]}");
+                Console.WriteLine($"{x.TextArray[1]} => {y.TextArray[1]}");
                 Console.ReadKey();
             }
             else
