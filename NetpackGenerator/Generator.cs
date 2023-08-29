@@ -39,6 +39,7 @@ namespace Netpack
 
                     serializationMethod.Statements.Add(new CodeVariableDeclarationStatement(typeof(ushort), "ArraySize"));
                     serializationMethod.Statements.Add(new CodeVariableDeclarationStatement(typeof(int), "ByteCount"));
+
                     GenerateFieldSerializer(serializationMethod.Statements, fields, typeName);
 
                     generatedClass.Members.Add(serializationMethod);
