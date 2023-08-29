@@ -63,12 +63,6 @@ namespace Netpack
             }
 
             CodeDomProvider provider = new CSharpCodeProvider();
-            using (StringWriter writer = new StringWriter())
-            {
-                provider.GenerateCodeFromNamespace(codeNamespace, writer, new CodeGeneratorOptions());
-                writer.ToString();
-            }
-
             var generatedFile = Path.Combine(Directory.GetParent(Environment.CurrentDirectory).Parent.Parent.FullName, "Generateds.cs");
             var stringBuilder = new StringBuilder();
 
