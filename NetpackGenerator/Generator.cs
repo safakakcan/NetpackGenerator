@@ -8,7 +8,7 @@ namespace Netpack
 {
     public static class Generator
     {
-        private const string GeneratedClassName = "Serializer";
+        private const string GeneratedClassName = "NetpackSerializer";
 
         public static void Generate()
         {
@@ -23,6 +23,7 @@ namespace Netpack
             generatedClass.IsClass = true;
             
             var types = FindAllSerializableTypes();
+            if (!types.Any()) return;
 
             foreach (var type in types)
             {
