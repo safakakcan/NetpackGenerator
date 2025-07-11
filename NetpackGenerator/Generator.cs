@@ -339,7 +339,7 @@ namespace Netpack
             Type targetType = typeof(INetpack);
 
             return AppDomain.CurrentDomain.GetAssemblies()
-                .Where(asm => !asm.IsDynamic) // dynamic assembly'leri atla
+                .Where(asm => !asm.IsDynamic)
                 .SelectMany(assembly =>
                 {
                     try
