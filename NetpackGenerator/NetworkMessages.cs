@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Netpack
 {
-    public class TestMessage
+    public class TestMessage : INetpack
     {
         public int Id;
         public float Value;

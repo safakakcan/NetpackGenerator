@@ -37,7 +37,7 @@ namespace Netpack
             }
             else
             {
-                Generator.Generate(typeof(TestMessage));
+                Generator.Generate();
             }
         }
     }
