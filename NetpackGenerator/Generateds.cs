@@ -43,7 +43,7 @@ namespace Netpack {
             ArraySize = (ushort)TestMessage.Text.Length;
             MemoryMarshal.Write<ushort>(Data.Slice(Index), ref ArraySize);
             Index = Index + sizeof(ushort);
-            ByteCount = (sizeof(char) * TestMessage.Text.Length);
+            ByteCount = Encoding.UTF8.GetByteCount(TestMessage.Text);
             Encoding.UTF8.GetBytes(TestMessage.Text, Data.Slice(Index, ByteCount));
             Index = Index + ByteCount;
             // Write array size of TestMessage.TextArray
@@ -57,7 +57,7 @@ namespace Netpack {
                 ArraySize = (ushort)TestMessage.TextArray[i].Length;
                 MemoryMarshal.Write<ushort>(Data.Slice(Index), ref ArraySize);
                 Index = Index + sizeof(ushort);
-                ByteCount = (sizeof(char) * TestMessage.TextArray[i].Length);
+                ByteCount = Encoding.UTF8.GetByteCount(TestMessage.TextArray[i]);
                 Encoding.UTF8.GetBytes(TestMessage.TextArray[i], Data.Slice(Index, ByteCount));
                 Index = Index + ByteCount;
             }
@@ -101,7 +101,7 @@ namespace Netpack {
             // Write array size of TestMessage.Text
             ArraySize = MemoryMarshal.Read<ushort>(Data.Slice(Index, sizeof(ushort)));
             Index = Index + sizeof(ushort);
-            ByteCount = (sizeof(char) * ArraySize);
+            ByteCount = ArraySize;
             TestMessage.Text = Encoding.UTF8.GetString(Data.Slice(Index, ByteCount));
             Index = Index + ByteCount;
             // Write array size of TestMessage.TextArray
@@ -114,7 +114,7 @@ namespace Netpack {
                 // Write array size of TestMessage.TextArray
                 ArraySize = MemoryMarshal.Read<ushort>(Data.Slice(Index, sizeof(ushort)));
                 Index = Index + sizeof(ushort);
-                ByteCount = (sizeof(char) * ArraySize);
+                ByteCount = ArraySize;
                 TestMessage.TextArray[i] = Encoding.UTF8.GetString(Data.Slice(Index, ByteCount));
                 Index = Index + ByteCount;
             }
