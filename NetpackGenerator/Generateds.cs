@@ -4,7 +4,7 @@ namespace Netpack {
     using System.Runtime.InteropServices;
     
     
-    public static class Serializer {
+    public static class NetpackSerializer {
         
         public static void Serialize(this TestMessage TestMessage, System.Span<byte> Data, ref int Index) {
             ushort ArraySize;
@@ -32,12 +32,16 @@ namespace Netpack {
                 ArraySize = (ushort)TestMessage.Stat[i].Data.Length;
                 MemoryMarshal.Write<ushort>(Data.Slice(Index), ref ArraySize);
                 Index = Index + sizeof(ushort);
-                // Iterate TestMessage.Stat[i].Data array
-                for (int ii = 0; ii < TestMessage.Stat[i].Data.Length; ii++
-                ) {
-                    MemoryMarshal.Write<byte>(Data.Slice(Index), ref TestMessage.Stat[i].Data[ii]);
-                    Index = Index + sizeof(Byte);
-                }
+                Span<byte> DataSpan = MemoryMarshal.Cast<byte, byte>(TestMessage.Stat[i].Data.AsSpan());
+                DataSpan.CopyTo(Data.Slice(Index));
+                Index = Index + sizeof(Byte) * ArraySize;
+                // Write array size of TestMessage.Stat[i].RelatedIds
+                ArraySize = (ushort)TestMessage.Stat[i].RelatedIds.Length;
+                MemoryMarshal.Write<ushort>(Data.Slice(Index), ref ArraySize);
+                Index = Index + sizeof(ushort);
+                Span<byte> RelatedIdsSpan = MemoryMarshal.Cast<int, byte>(TestMessage.Stat[i].RelatedIds.AsSpan());
+                RelatedIdsSpan.CopyTo(Data.Slice(Index));
+                Index = Index + sizeof(Int32) * ArraySize;
             }
             // Write array size of TestMessage.Text
             ArraySize = (ushort)TestMessage.Text.Length;
@@ -63,10 +67,9 @@ namespace Netpack {
             }
         }
         
-        public static void Deserialize(this Span<byte> Data, ref int Index, out Netpack.TestMessage TestMessage) {
+        public static void Deserialize(this Span<byte> Data, ref int Index, ref Netpack.TestMessage TestMessage) {
             ushort ArraySize;
             int ByteCount;
-            TestMessage = new();
             // Read value of TestMessage.Id
             TestMessage.Id = MemoryMarshal.Read<int>(Data.Slice(Index, sizeof(Int32)));
             Index = Index + sizeof(Int32);
@@ -90,13 +93,13 @@ namespace Netpack {
                 // Write array size of TestMessage.Stat[i].Data
                 ArraySize = MemoryMarshal.Read<ushort>(Data.Slice(Index, sizeof(ushort)));
                 Index = Index + sizeof(ushort);
-                TestMessage.Stat[i].Data = new Byte[ArraySize];
-                // Iterate TestMessage.Stat[i].Data array
-                for (int ii = 0; ii < TestMessage.Stat[i].Data.Length; ii++
-                ) {
-                    TestMessage.Stat[i].Data[ii] = MemoryMarshal.Read<byte>(Data.Slice(Index));
-                    Index = Index + sizeof(Byte);
-                }
+                TestMessage.Stat[i].Data = MemoryMarshal.Cast<byte, byte>(Data.Slice(Index, sizeof(System.Byte) * ArraySize)).ToArray();
+                Index = Index + sizeof(Byte) * ArraySize;
+                // Write array size of TestMessage.Stat[i].RelatedIds
+                ArraySize = MemoryMarshal.Read<ushort>(Data.Slice(Index, sizeof(ushort)));
+                Index = Index + sizeof(ushort);
+                TestMessage.Stat[i].RelatedIds = MemoryMarshal.Cast<byte, int>(Data.Slice(Index, sizeof(System.Int32) * ArraySize)).ToArray();
+                Index = Index + sizeof(Int32) * ArraySize;
             }
             // Write array size of TestMessage.Text
             ArraySize = MemoryMarshal.Read<ushort>(Data.Slice(Index, sizeof(ushort)));

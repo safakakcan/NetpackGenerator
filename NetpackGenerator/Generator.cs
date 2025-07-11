@@ -21,7 +21,7 @@ namespace Netpack
             generatedClass.TypeAttributes = TypeAttributes.Public;
             generatedClass.Attributes = MemberAttributes.Public | MemberAttributes.Static;
             generatedClass.IsClass = true;
-            
+
             var types = FindAllSerializableTypes();
             if (!types.Any()) return;
 
@@ -65,12 +65,12 @@ namespace Netpack
                     });
                     deserializationMethod.Parameters.Add(new CodeParameterDeclarationExpression(new CodeTypeReference(type), typeName)
                     {
-                        Direction = FieldDirection.Out
+                        Direction = FieldDirection.Ref
                     });
 
                     deserializationMethod.Statements.Add(new CodeVariableDeclarationStatement(typeof(ushort), "ArraySize"));
                     deserializationMethod.Statements.Add(new CodeVariableDeclarationStatement(typeof(int), "ByteCount"));
-                    GenerateFieldDeserializer(deserializationMethod.Statements, fields, type, typeName);
+                    GenerateFieldDeserializer(deserializationMethod.Statements, fields, type, typeName, false);
 
                     generatedClass.Members.Add(deserializationMethod);
                 }
@@ -130,61 +130,73 @@ namespace Netpack
                 {
                     var elementType = field.FieldType.GetElementType();
 
-                    var iterationIndexName = string.Empty;
-                    var iterationDepth = fieldName.Split('.').Length - 1;
-                    for (int i = 0; i < iterationDepth; i++)
+                    if (elementType.IsPrimitive)
                     {
-                        iterationIndexName += "i";
-                    }
-
-                    WriteArraySize(statements, fieldName);
-
-                    var iterationStatements = new CodeStatementCollection();
-
-                    if (elementType == typeof(string))
-                    {
-                        WriteArraySize(iterationStatements, $"{fieldName}[{iterationIndexName}]");
-
-                        var byteCountVarExpression = new CodeAssignStatement(new CodeVariableReferenceExpression("ByteCount"),
-                            new CodeMethodInvokeExpression(new CodeSnippetExpression("Encoding.UTF8"), "GetByteCount",
-                                new CodeVariableReferenceExpression($"{fieldName}[{iterationIndexName}]")));
-                        var targetSpan = new CodeMethodInvokeExpression(
-                            new CodeMethodReferenceExpression(new CodeVariableReferenceExpression("Data"), "Slice"),
-                            new CodeVariableReferenceExpression("Index"), new CodeVariableReferenceExpression("ByteCount"));
-                        iterationStatements.Add(byteCountVarExpression);
-                        iterationStatements.Add(new CodeExpressionStatement(new CodeMethodInvokeExpression(new CodeSnippetExpression("Encoding.UTF8"),
-                            "GetBytes", new CodeSnippetExpression($"{fieldName}[{iterationIndexName}]"), targetSpan)));
-                        iterationStatements.Add(new CodeAssignStatement(new CodeVariableReferenceExpression("Index"),
-                            new CodeSnippetExpression($"Index + ByteCount")));
-                    }
-                    else if (elementType.IsPrimitive)
-                    {
-                        var methodRefExpression = new CodeMethodReferenceExpression(new CodeSnippetExpression("MemoryMarshal"), "Write",
-                            new CodeTypeReference(elementType));
+                        WriteArraySize(statements, fieldName);
+                        
+                        var methodRefExpression = new CodeMethodInvokeExpression(new CodeMethodReferenceExpression(
+                                new CodeSnippetExpression("MemoryMarshal"), "Cast",
+                                new CodeTypeReference(elementType), new CodeTypeReference(typeof(byte))),
+                            new CodeSnippetExpression($"{fieldName}.AsSpan()"));
+                        var spanVariableExpression = new CodeVariableDeclarationStatement($"Span<byte>", $"{field.Name}Span", methodRefExpression);
                         var spanSliceExpression = new CodeMethodReferenceExpression(new CodeVariableReferenceExpression("Data"), "Slice");
 
-                        iterationStatements.Add(new CodeExpressionStatement(new CodeMethodInvokeExpression(methodRefExpression,
-                            new CodeMethodInvokeExpression(spanSliceExpression, new CodeVariableReferenceExpression("Index")),
-                            new CodeSnippetExpression($"ref {fieldName}[{iterationIndexName}]"))));
-                        iterationStatements.Add(new CodeAssignStatement(new CodeVariableReferenceExpression("Index"),
-                            new CodeSnippetExpression($"Index + sizeof({elementType.Name})")));
+                        statements.Add(spanVariableExpression);
+                        statements.Add(new CodeExpressionStatement(new CodeMethodInvokeExpression(
+                            new CodeVariableReferenceExpression($"{field.Name}Span"), "CopyTo",
+                            new CodeMethodInvokeExpression(spanSliceExpression, new CodeVariableReferenceExpression("Index")))));
+                        statements.Add(new CodeAssignStatement(new CodeVariableReferenceExpression("Index"),
+                            new CodeSnippetExpression($"Index + sizeof({elementType.Name}) * ArraySize")));
                     }
                     else
                     {
-                        GenerateFieldSerializer(iterationStatements, elementType.GetFields(), $"{fieldName}[{iterationIndexName}]");
+                        var iterationIndexName = string.Empty;
+                        var iterationDepth = fieldName.Split('.').Length - 1;
+                        for (int i = 0; i < iterationDepth; i++)
+                        {
+                            iterationIndexName += "i";
+                        }
+
+                        WriteArraySize(statements, fieldName);
+
+                        var iterationStatements = new CodeStatementCollection();
+
+                        if (elementType == typeof(string))
+                        {
+                            WriteArraySize(iterationStatements, $"{fieldName}[{iterationIndexName}]");
+
+                            var byteCountVarExpression = new CodeAssignStatement(new CodeVariableReferenceExpression("ByteCount"),
+                                new CodeMethodInvokeExpression(new CodeSnippetExpression("Encoding.UTF8"), "GetByteCount",
+                                    new CodeVariableReferenceExpression($"{fieldName}[{iterationIndexName}]")));
+                            var targetSpan = new CodeMethodInvokeExpression(
+                                new CodeMethodReferenceExpression(new CodeVariableReferenceExpression("Data"), "Slice"),
+                                new CodeVariableReferenceExpression("Index"), new CodeVariableReferenceExpression("ByteCount"));
+                            iterationStatements.Add(byteCountVarExpression);
+                            iterationStatements.Add(new CodeExpressionStatement(new CodeMethodInvokeExpression(
+                                new CodeSnippetExpression("Encoding.UTF8"),
+                                "GetBytes", new CodeSnippetExpression($"{fieldName}[{iterationIndexName}]"), targetSpan)));
+                            iterationStatements.Add(new CodeAssignStatement(new CodeVariableReferenceExpression("Index"),
+                                new CodeSnippetExpression($"Index + ByteCount")));
+                        }
+                        else
+                        {
+                            GenerateFieldSerializer(iterationStatements, elementType.GetFields(), $"{fieldName}[{iterationIndexName}]");
+                        }
+
+                        var iterationStatementArray = new CodeStatement[iterationStatements.Count];
+                        for (int i = 0; i < iterationStatements.Count; i++)
+                        {
+                            iterationStatementArray[i] = iterationStatements[i];
+                        }
+
+                        statements.Add(new CodeCommentStatement($"Iterate {fieldName} array"));
+                        statements.Add(new CodeIterationStatement(
+                            new CodeVariableDeclarationStatement(typeof(int), iterationIndexName, new CodeSnippetExpression("0")),
+                            new CodeSnippetExpression($"{iterationIndexName} < {fieldName}.Length"),
+                            new CodeSnippetStatement($"{iterationIndexName}++"),
+                            iterationStatementArray));
                     }
 
-                    var iterationStatementArray = new CodeStatement[iterationStatements.Count];
-                    for (int i = 0; i < iterationStatements.Count; i++)
-                    {
-                        iterationStatementArray[i] = iterationStatements[i];
-                    }
-
-                    statements.Add(new CodeCommentStatement($"Iterate {fieldName} array"));
-                    statements.Add(new CodeIterationStatement(
-                        new CodeVariableDeclarationStatement(typeof(int), iterationIndexName, new CodeSnippetExpression("0")),
-                        new CodeSnippetExpression($"{iterationIndexName} < {fieldName}.Length"), new CodeSnippetStatement($"{iterationIndexName}++"),
-                        iterationStatementArray));
                     continue;
                 }
 
@@ -195,9 +207,9 @@ namespace Netpack
             }
         }
 
-        private static void GenerateFieldDeserializer(CodeStatementCollection statements, FieldInfo[] fields, Type parentType, string parentName)
+        private static void GenerateFieldDeserializer(CodeStatementCollection statements, FieldInfo[] fields, Type parentType, string parentName, bool initObject = true)
         {
-            statements.Add(new CodeAssignStatement(new CodeVariableReferenceExpression(parentName), new CodeSnippetExpression($"new()")));
+            if (initObject) statements.Add(new CodeAssignStatement(new CodeVariableReferenceExpression(parentName), new CodeSnippetExpression($"new()")));
 
             foreach (var field in fields)
             {
@@ -239,63 +251,76 @@ namespace Netpack
                 {
                     var elementType = field.FieldType.GetElementType();
 
-                    var iterationIndexName = string.Empty;
-                    var iterationDepth = fieldName.Split('.').Length - 1;
-                    for (int i = 0; i < iterationDepth; i++)
+                    if (elementType.IsPrimitive)
                     {
-                        iterationIndexName += "i";
-                    }
+                        ReadArraySize(statements, fieldName);
 
-                    ReadArraySize(statements, fieldName);
-                    statements.Add(new CodeAssignStatement(new CodeVariableReferenceExpression(fieldName),
-                        new CodeSnippetExpression($"new {elementType.Name}[ArraySize]")));
-
-                    var iterationStatements = new CodeStatementCollection();
-
-                    if (elementType == typeof(string))
-                    {
-                        ReadArraySize(iterationStatements, fieldName);
-
-                        var byteCountVarExpression = new CodeAssignStatement(new CodeVariableReferenceExpression("ByteCount"),
-                            new CodeVariableReferenceExpression("ArraySize"));
-                        var targetSpan = new CodeMethodInvokeExpression(
-                            new CodeMethodReferenceExpression(new CodeVariableReferenceExpression("Data"), "Slice"),
-                            new CodeVariableReferenceExpression("Index"), new CodeVariableReferenceExpression("ByteCount"));
-                        iterationStatements.Add(byteCountVarExpression);
-                        iterationStatements.Add(new CodeAssignStatement(new CodeSnippetExpression($"{fieldName}[{iterationIndexName}]"),
-                            new CodeMethodInvokeExpression(new CodeSnippetExpression("Encoding.UTF8"), "GetString", targetSpan)));
-                        iterationStatements.Add(new CodeAssignStatement(new CodeVariableReferenceExpression("Index"),
-                            new CodeSnippetExpression($"Index + ByteCount")));
-                    }
-                    else if (elementType.IsPrimitive)
-                    {
-                        var methodRefExpression = new CodeMethodReferenceExpression(new CodeSnippetExpression("MemoryMarshal"), "Read",
-                            new CodeTypeReference(elementType));
+                        var methodRefExpression = new CodeMethodReferenceExpression(new CodeSnippetExpression("MemoryMarshal"), "Cast",
+                            new CodeTypeReference(typeof(byte)), new CodeTypeReference(elementType));
                         var spanSliceExpression = new CodeMethodReferenceExpression(new CodeVariableReferenceExpression("Data"), "Slice");
 
-                        iterationStatements.Add(new CodeAssignStatement(
-                            new CodeIndexerExpression(new CodeVariableReferenceExpression(fieldName), new CodeSnippetExpression(iterationIndexName)),
-                            new CodeMethodInvokeExpression(methodRefExpression,
-                                new CodeMethodInvokeExpression(spanSliceExpression, new CodeVariableReferenceExpression("Index")))));
-                        iterationStatements.Add(new CodeAssignStatement(new CodeVariableReferenceExpression("Index"),
-                            new CodeSnippetExpression($"Index + sizeof({elementType.Name})")));
+                        statements.Add(new CodeAssignStatement(
+                            new CodeVariableReferenceExpression(fieldName),
+                            new CodeMethodInvokeExpression(
+                                new CodeMethodInvokeExpression(methodRefExpression,
+                                    new CodeMethodInvokeExpression(spanSliceExpression,
+                                        new CodeSnippetExpression("Index"), new CodeSnippetExpression($"sizeof({elementType}) * ArraySize"))),
+                                "ToArray")));
+                        statements.Add(new CodeAssignStatement(new CodeVariableReferenceExpression("Index"),
+                            new CodeSnippetExpression($"Index + sizeof({elementType.Name}) * ArraySize")));
                     }
                     else
                     {
-                        GenerateFieldDeserializer(iterationStatements, elementType.GetFields(), elementType, $"{fieldName}[{iterationIndexName}]");
+                        var iterationIndexName = string.Empty;
+                        var iterationDepth = fieldName.Split('.').Length - 1;
+                        for (int i = 0; i < iterationDepth; i++)
+                        {
+                            iterationIndexName += "i";
+                        }
+
+                        ReadArraySize(statements, fieldName);
+
+                        var iterationStatements = new CodeStatementCollection();
+
+                        if (elementType == typeof(string))
+                        {
+                            statements.Add(new CodeAssignStatement(new CodeVariableReferenceExpression(fieldName),
+                                new CodeSnippetExpression($"new {elementType.Name}[ArraySize]")));
+                            ReadArraySize(iterationStatements, fieldName);
+
+                            var byteCountVarExpression = new CodeAssignStatement(new CodeVariableReferenceExpression("ByteCount"),
+                                new CodeVariableReferenceExpression("ArraySize"));
+                            var targetSpan = new CodeMethodInvokeExpression(
+                                new CodeMethodReferenceExpression(new CodeVariableReferenceExpression("Data"), "Slice"),
+                                new CodeVariableReferenceExpression("Index"), new CodeVariableReferenceExpression("ByteCount"));
+                            iterationStatements.Add(byteCountVarExpression);
+                            iterationStatements.Add(new CodeAssignStatement(new CodeSnippetExpression($"{fieldName}[{iterationIndexName}]"),
+                                new CodeMethodInvokeExpression(new CodeSnippetExpression("Encoding.UTF8"), "GetString", targetSpan)));
+                            iterationStatements.Add(new CodeAssignStatement(new CodeVariableReferenceExpression("Index"),
+                                new CodeSnippetExpression($"Index + ByteCount")));
+                        }
+                        else
+                        {
+                            statements.Add(new CodeAssignStatement(new CodeVariableReferenceExpression(fieldName),
+                                new CodeSnippetExpression($"new {elementType.Name}[ArraySize]")));
+                            GenerateFieldDeserializer(iterationStatements, elementType.GetFields(), elementType,
+                                $"{fieldName}[{iterationIndexName}]");
+                        }
+
+                        var iterationStatementArray = new CodeStatement[iterationStatements.Count];
+                        for (int i = 0; i < iterationStatements.Count; i++)
+                        {
+                            iterationStatementArray[i] = iterationStatements[i];
+                        }
+
+                        statements.Add(new CodeCommentStatement($"Iterate {fieldName} array"));
+                        statements.Add(new CodeIterationStatement(
+                            new CodeVariableDeclarationStatement(typeof(int), iterationIndexName, new CodeSnippetExpression("0")),
+                            new CodeSnippetExpression($"{iterationIndexName} < {fieldName}.Length"),
+                            new CodeSnippetStatement($"{iterationIndexName}++"),
+                            iterationStatementArray));
                     }
 
-                    var iterationStatementArray = new CodeStatement[iterationStatements.Count];
-                    for (int i = 0; i < iterationStatements.Count; i++)
-                    {
-                        iterationStatementArray[i] = iterationStatements[i];
-                    }
-
-                    statements.Add(new CodeCommentStatement($"Iterate {fieldName} array"));
-                    statements.Add(new CodeIterationStatement(
-                        new CodeVariableDeclarationStatement(typeof(int), iterationIndexName, new CodeSnippetExpression("0")),
-                        new CodeSnippetExpression($"{iterationIndexName} < {fieldName}.Length"), new CodeSnippetStatement($"{iterationIndexName}++"),
-                        iterationStatementArray));
                     continue;
                 }
 

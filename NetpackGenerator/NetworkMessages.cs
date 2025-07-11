@@ -35,12 +35,16 @@ namespace Netpack
         public int Id;
         public float Speed;
         public byte[] Data;
+        public int[] RelatedIds;
 
         public InnerStruct()
         {
             Id = 13;
             Speed = 100;
             Data = new byte[4];
+            Data[2] = 12;
+            RelatedIds = new int[8];
+            RelatedIds[2] = 24;
         }
     }
 }
