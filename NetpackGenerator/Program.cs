@@ -19,10 +19,10 @@ namespace Netpack
                 stopwatch.Start();
                 for (int i = 0; i < 10_000; i++)
                 {
-                    x.Serialize(bytes, ref index);
+                    x.Serialize(bytes);
                     index = 0;
                     var span = bytes.AsSpan();
-                    span.Deserialize(ref index, ref y);
+                    span.Deserialize(ref y);
                     index = 0;
                 }
                 stopwatch.Stop();

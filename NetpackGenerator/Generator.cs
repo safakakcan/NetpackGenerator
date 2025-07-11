@@ -35,7 +35,7 @@ namespace Netpack
                     CodeMemberMethod serializationMethod = new CodeMemberMethod()
                     {
                         Name = "Serialize",
-                        Attributes = MemberAttributes.Public | MemberAttributes.Static
+                        Attributes = MemberAttributes.Private | MemberAttributes.Static
                     };
                     serializationMethod.Parameters.Add(new CodeParameterDeclarationExpression(new CodeTypeReference($"this {type.Name}"), typeName));
                     serializationMethod.Parameters.Add(new CodeParameterDeclarationExpression(new CodeTypeReference(typeof(Span<byte>)), "Data"));
@@ -43,12 +43,25 @@ namespace Netpack
                     {
                         Direction = FieldDirection.Ref
                     });
+                    
+                    CodeMemberMethod publicSerializationMethod = new CodeMemberMethod()
+                    {
+                        Name = "Serialize",
+                        Attributes = MemberAttributes.Public | MemberAttributes.Static
+                    };
+                    publicSerializationMethod.Parameters.Add(new CodeParameterDeclarationExpression(new CodeTypeReference($"this {type.Name}"), typeName));
+                    publicSerializationMethod.Parameters.Add(new CodeParameterDeclarationExpression(new CodeTypeReference(typeof(Span<byte>)), "Data"));
+                    publicSerializationMethod.Statements.Add(new CodeVariableDeclarationStatement(typeof(int), "Index", new CodeSnippetExpression("0")));
+                    publicSerializationMethod.Statements.Add(new CodeMethodInvokeExpression(null, "Serialize", new []
+                    {
+                        new CodeSnippetExpression(typeName), new CodeSnippetExpression("Data"), new CodeSnippetExpression("ref Index")
+                    }));
 
                     serializationMethod.Statements.Add(new CodeVariableDeclarationStatement(typeof(ushort), "ArraySize"));
                     serializationMethod.Statements.Add(new CodeVariableDeclarationStatement(typeof(int), "ByteCount"));
-
                     GenerateFieldSerializer(serializationMethod.Statements, fields, typeName);
 
+                    generatedClass.Members.Add(publicSerializationMethod);
                     generatedClass.Members.Add(serializationMethod);
                 }
 
@@ -56,7 +69,7 @@ namespace Netpack
                     CodeMemberMethod deserializationMethod = new CodeMemberMethod()
                     {
                         Name = "Deserialize",
-                        Attributes = MemberAttributes.Public | MemberAttributes.Static
+                        Attributes = MemberAttributes.Private | MemberAttributes.Static
                     };
                     deserializationMethod.Parameters.Add(new CodeParameterDeclarationExpression(new CodeTypeReference($"this Span<byte>"), "Data"));
                     deserializationMethod.Parameters.Add(new CodeParameterDeclarationExpression(new CodeTypeReference(typeof(int)), "Index")
@@ -67,11 +80,28 @@ namespace Netpack
                     {
                         Direction = FieldDirection.Ref
                     });
-
+                    
+                    CodeMemberMethod publicDeserializationMethod = new CodeMemberMethod()
+                    {
+                        Name = "Deserialize",
+                        Attributes = MemberAttributes.Public | MemberAttributes.Static
+                    };
+                    publicDeserializationMethod.Parameters.Add(new CodeParameterDeclarationExpression(new CodeTypeReference($"this Span<byte>"), "Data"));
+                    publicDeserializationMethod.Parameters.Add(new CodeParameterDeclarationExpression(new CodeTypeReference(type), typeName)
+                    {
+                        Direction = FieldDirection.Ref
+                    });
+                    publicDeserializationMethod.Statements.Add(new CodeVariableDeclarationStatement(typeof(int), "Index", new CodeSnippetExpression("0")));
+                    publicDeserializationMethod.Statements.Add(new CodeMethodInvokeExpression(null, "Deserialize", new []
+                    {
+                        new CodeSnippetExpression("Data"), new CodeSnippetExpression("ref Index"), new CodeSnippetExpression($"ref {typeName}")
+                    }));
+                    
                     deserializationMethod.Statements.Add(new CodeVariableDeclarationStatement(typeof(ushort), "ArraySize"));
                     deserializationMethod.Statements.Add(new CodeVariableDeclarationStatement(typeof(int), "ByteCount"));
                     GenerateFieldDeserializer(deserializationMethod.Statements, fields, type, typeName, false);
 
+                    generatedClass.Members.Add(publicDeserializationMethod);
                     generatedClass.Members.Add(deserializationMethod);
                 }
             }

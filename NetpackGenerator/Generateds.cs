@@ -6,7 +6,12 @@ namespace Netpack {
     
     public static class NetpackSerializer {
         
-        public static void Serialize(this TestMessage TestMessage, System.Span<byte> Data, ref int Index) {
+        public static void Serialize(this TestMessage TestMessage, System.Span<byte> Data) {
+            int Index = 0;
+            Serialize(TestMessage, Data, ref Index);
+        }
+        
+        private static void Serialize(this TestMessage TestMessage, System.Span<byte> Data, ref int Index) {
             ushort ArraySize;
             int ByteCount;
             // Write value of TestMessage.Id
@@ -67,7 +72,12 @@ namespace Netpack {
             }
         }
         
-        public static void Deserialize(this Span<byte> Data, ref int Index, ref Netpack.TestMessage TestMessage) {
+        public static void Deserialize(this Span<byte> Data, ref Netpack.TestMessage TestMessage) {
+            int Index = 0;
+            Deserialize(Data, ref Index, ref TestMessage);
+        }
+        
+        private static void Deserialize(this Span<byte> Data, ref int Index, ref Netpack.TestMessage TestMessage) {
             ushort ArraySize;
             int ByteCount;
             // Read value of TestMessage.Id
